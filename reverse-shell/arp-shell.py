@@ -32,7 +32,7 @@ def getMAC():
 print('\n got victim mac address ')
 victimMAC = getMAC()
  
- 
+
 spoofStatus = True
 def poison():
     while 1:
